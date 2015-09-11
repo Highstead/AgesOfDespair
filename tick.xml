@@ -1,0 +1,418 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE muclient>
+
+<muclient>
+<plugin
+	name="TickTimer"
+	author="Michael Highstead"
+	id="00298e99be9b1e8042e8721d"
+	language="Lua"
+	purpose="Shows a bar of buttons you can click on to do things"
+	requires="4.40"
+	save_state="y"
+	version="1.0"
+   >
+   
+<description trim="y">
+<![CDATA[
+	e:\Projects\Mushclient\Plugins\Tick.xml
+	script="bodyclock" 
+	script="heartbeat" 
+]]>
+</description>
+
+</plugin>
+<triggers>
+	<trigger
+		enabled="y"
+		group="Buffs"
+		match="^Your body clock reverts back to normal.$"
+		regexp="y"
+		send_to="12"
+		sequence="10"
+  >
+  <send>send("pt Body clock down.");
+	DisableBodyClock()</send>
+	</trigger>
+	<trigger
+		enabled="y"
+		group="Ticks"
+		match="^\s*You have finished concentrating on the spell.$"
+		regexp="y"
+		send_to="12"
+		sequence="103"
+	>
+  <send>disableTickTrigger("Detected casted spell");</send>
+  </trigger>
+  <trigger
+		enabled="y"
+		group="Ticks"
+		match="^Some of the energy of the corpse floats into you.$"
+		regexp="y"
+		send_to="12"
+		sequence="103"
+  >
+  <send>disableTickTrigger("Detected rdrain");
+world.Send("hp");</send>
+  </trigger>
+  <trigger
+		enabled="y"
+		group="Ticks"
+		match="display the head for all to see, the blood still flowing from the neck!"
+		send_to="12"
+		sequence="103"
+  >
+  <send>disableTickTrigger("Detected claim trophy");</send>
+  </trigger>
+  <trigger
+		enabled="y"
+		group="Ticks"
+		match="You are rewarded with some more power to concentrate."
+		send_to="12"
+		sequence="103"
+  >
+  <send>disableTickTrigger("Detected sacrifice");</send>
+  </trigger>
+  <trigger
+		enabled="y"
+		group="Ticks"
+		match="You summon a blue aura around yourself that heals your wounds slightly."
+		send_to="12"
+		sequence="103"
+  >
+  <send>enableTickTrigger("Detected heal");
+world.Send("lh");</send>
+  </trigger>
+  <trigger
+		enabled="y"
+		group="Ticks"
+		match="*HP: [*/*]  CONC: [*/*]"
+		name="TickEnabler"
+		send_to="12"
+		sequence="104"
+  >
+  <send>checkTick();
+	setHP("%1","%2");
+	setCP("%3","%4");</send>
+  </trigger>
+</triggers>
+
+
+<aliases>
+
+  <alias
+		match="verify"
+		enabled="y"
+		group="Scripting"
+		send_to="12"
+		sequence="102"
+  >
+  <send>verifyTickTrigger()</send>
+  </alias>
+  <alias
+		match="hp"
+		enabled="y"
+		group="Scripting"
+		send_to="12"
+		sequence="102"
+  >
+  <send>disableTickTrigger("Manual HP");
+world.Send("hp");
+</send>
+  </alias>
+
+  <alias
+   match="clear timers"
+   enabled="y"
+   group="Scripting"
+   send_to="12"
+   sequence="100"
+  >
+  <send>deleteAllTimers()</send>
+  </alias>
+  
+</aliases>
+
+<timers>
+  <timer script="remove_message" 
+         second="5.00" 
+         active_closed="y" 
+         name="remove_message"
+         />
+  <timer script="change_message"
+		 second="2.00"
+		 active_closed="y"
+		 name="change_message"
+	/>
+  
+  <timer 
+		 script="alertTick"
+         second="17.00" 
+         active_closed="n" 
+         name="heartBeat17"
+    />
+  <timer 
+		 script="IsHeartBeat"
+         second="22.00" 
+         active_closed="n" 
+         name="hbeat22"
+         >
+  </timer>
+</timers>
+<!--  Script:   e:\Projects\MushClient\Plugins\Tick.xml  -->
+<script>
+<![CDATA[
+
+--Defines
+HBEAT_LENGTH = 44;
+DEBUG_MODE = false;
+
+--Globals
+timersActive = false;
+verified = false;
+nBcTick = true;		--Enabled by default for the first round.
+isBced = false;		
+
+
+function IsHeartBeat()
+	if nBcTick then
+		--print("isHeartbeat");
+		EnableTimer ("heartBeat17");
+		ResetTimer ("heartBeat17");
+	elseif isBced then
+		--print("isBcdHeartbeat");
+		EnableTimer ("heartBeat17");
+		ResetTimer ("heartBeat17");
+	end
+	if nBcTick then
+		nBcTick = false;
+	else
+		nBcTick = true;
+	end
+end
+function alertTick()
+	print("Tick in 5");
+	alert("Tick in 5", false);
+	EnableTimer ("change_message");
+	ResetTimer ("change_message");
+	EnableTimer ("heartBeat17", false);
+end
+
+function change_message()
+	print("Tick in 3");
+	alert("Tick in 3", true);
+	EnableTimer ("change_message", false);
+end
+
+----------------------------------------------------------------------
+--	Trigger scripts													--
+----------------------------------------------------------------------
+function toggleTickTrigger(bool)
+	timersActive = bool;
+end
+function disableTickTrigger(msg)
+	toggleTickTrigger(false);
+	if(msg ~= nil) then
+		wDebug("DISABLED: " .. msg);
+	else
+		wDebug("DISABLED: TICK");
+	end
+	world.AddTimer("eTimer", 0,0,1, "", timer_flag.Enabled 
+											+ timer_flag.Temporary 
+											+ timer_flag.Replace
+											+ timer_flag.OneShot, "enableTickTrigger");
+end
+function enableTickTrigger(msg)
+	toggleTickTrigger(true);
+	if(msg ~= nil) then
+		wDebug("ENABLED: " .. msg);
+	else
+		wDebug("ENABLED: TICK");
+	end
+end
+
+
+----------------------------------------------------------------------
+--	Tick Scripting													--
+----------------------------------------------------------------------
+-------------------------------- checkTick() --------------------------------
+function checkTick()
+	local boolTickEnabled
+
+	boolTickEnabled = timersActive;
+	if not verified then
+		if (boolTickEnabled) then
+			wDebug("TickTrigger is Enabled");
+			createTickTimers();
+		else
+			wDebug("TickTrigger is Disabled");
+			enableTickTrigger();
+		end
+	end
+end
+----------------------------- createTickTimers() -----------------------------
+function createTickTimers()
+	if not verified then
+		print("Found Tick, Verify?");
+	else
+		return ;
+	end
+--	world.AddTimer("Tick", 0,0,HBEAT_LENGTH, "", timer_flag.Enabled 
+--											+ timer_flag.Temporary 
+--											+ timer_flag.Replace
+--											+ timer_flag.OneShot,"");
+	EnableTimer ("hbeat22");
+	ResetTimer ("hbeat22");
+	nBcTick = true;
+	
+	if(allowScriptFlee) then
+		world.Send("flee");
+	end
+end
+
+----------------------------- verifyTickTrigger() -----------------------------
+function verifyTickTrigger()
+	if not (GetTimerInfo ("hbeat22", 6)) then
+		print("Timers have not been verified");
+		return false;
+	end
+	verified = true;
+	
+	print("Timers have been verified");
+	world.SetTimerOption("Tick","Send_to","12");
+	SetTimerOption("Tick","Send","permTimerCreation()");
+end
+----------------------------- permTimerCreation() -----------------------------
+function permTimerCreation()
+	print("Tick");
+
+	EnableTimer ("hbeat22");
+	ResetTimer ("hbeat22");
+	--createTempTimers();
+end
+----------------------------- DeleteAllTickTimers() -----------------------------
+function deleteAllTimers()
+	verified = false;
+	print("Timers Deleted");
+	
+	EnableTimer("hbeat22", false);
+	ResetTimer("hbeat22");
+	EnableTimer("hbeat17", false);
+	ResetTimer("hbeat17");
+	EnableTimer("hbeat19", false);
+	ResetTimer("hbeat19");
+end
+
+function wDebug(str)
+	if DEBUG_MODE then
+		print(str);
+	end
+end
+
+----------------------------------------------------------------------
+--	Healer Timers													--
+----------------------------------------------------------------------
+function DisableBodyClock()
+	BodyClockToggle(false);
+end
+function EnableBodyClock()
+	BodyClockToggle(true);
+end
+function BodyClockToggle(boolToggle)
+	
+end
+
+----------------------------------------------------------------------
+--	Alert Printing													--
+----------------------------------------------------------------------
+
+-- configuration
+-- font
+FONT_NAME = "Arial Black"
+FONT_SIZE = 30
+TEXT_COLOUR = ColourNameToRGB ("yellow")
+BACKGROUND_COLOUR = ColourNameToRGB ("lightblue")
+
+-- where to put the window
+--0 = strech to output view size
+--1 = stretch with aspect ratio
+--2 = strech to owner size
+--3 = stretch with aspect ratio
+--4 = top left
+--5 = center left-right at top
+--6 = top right
+--7 = on right, center top-bottom
+--8 = on right, at bottom
+--9 = center left-right at bottom
+--10 = on left, at bottom
+--11 = on left, center top-bottom
+--12 = centre all
+--13 = tile
+
+WINDOW_POSITION = 8  -- centered
+OFFSET = 5  -- gap inside box
+SOUND_FILE = "/Windows/Media/Speech Off.wav"	-- what sound to play
+
+function alert (message, sound)
+
+
+	width   = WindowTextWidth (win, "f", message) 
+
+	-- make the window
+	WindowCreate (win, 0, 0, 
+				width + (OFFSET * 2), 
+				font_height + (OFFSET * 2), 
+				WINDOW_POSITION, 0, 
+				BACKGROUND_COLOUR) -- create window
+
+	WindowText (win, "f", message, OFFSET, OFFSET, 0, 0, TEXT_COLOUR)
+					
+	WindowRectOp (win, 1, 0, 0, 0, 0, TEXT_COLOUR)
+
+	-- show window
+	WindowShow (win,  true)  -- show it 
+
+	-- play a warning sound
+	if sound then
+		Sound (SOUND_FILE)
+	end
+
+
+	-- enable and reset the timer which removes the message
+	EnableTimer ("remove_message")
+	ResetTimer ("remove_message")
+
+end 
+
+-- here to remove the message
+function remove_message ()
+  WindowShow (win,  false)
+end -- remove_message
+
+-- startup stuff
+
+win = GetPluginID ()  -- get a unique name
+
+-- make the window
+WindowCreate (win, 0, 0, 0, 0, WINDOW_POSITION, 0, 0x000000)  -- create window
+               
+-- grab a font
+WindowFont (win, "f", FONT_NAME, FONT_SIZE) -- define font
+
+-- work out how high it is
+font_height = WindowFontInfo (win, "f", 1)   -- height of the font  
+
+function setHP(myHp, myMaxHp)
+	curHp = myHp;
+	maxHp = myMaxHp;
+end
+function setCP(myCp, myMaxCp)
+	cprCp = myCp;
+	maxCp = myMaxCp
+end
+
+]]>
+</script>
+
+
+</muclient>
